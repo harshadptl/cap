@@ -743,8 +743,8 @@ pub(crate) mod txn_helpers {
         for (&at, &sum) in balances.iter() {
             if sum != 0i128 {
                 return Err(TxnApiError::InvalidParameter(format!(
-                    "Unbalanced input and output amounts for asset code:{:?}",
-                    at.0.to_string()
+                    "Unbalanced input and output amounts for asset code:{:?} {:?}",
+                    at.0.to_string(), sum
                 )));
             }
         }

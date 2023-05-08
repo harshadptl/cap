@@ -10,6 +10,9 @@
 // details. You should have received a copy of the GNU General Public License along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 //! Generation and verification of user configurable transfer notes
+extern crate std;
+use std::time::{SystemTime, UNIX_EPOCH};
+use std::println;
 use crate::{
     errors::TxnApiError,
     keys::UserKeyPair,
@@ -311,6 +314,8 @@ impl<C: CapConfig> TransferNote<C> {
         let pub_inputs = TransferPublicInput::from_witness(&witness, valid_until)?;
         check_distinct_input_nullifiers(&pub_inputs.input_nullifiers)?;
 
+        let t1 = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+        println!("Current Micro Seconds: {}", t1.as_micros());
         let proof = crate::proof::transfer::prove(
             rng,
             proving_key,
@@ -319,6 +324,8 @@ impl<C: CapConfig> TransferNote<C> {
             signing_keypair.ver_key_ref(),
             &extra_proof_bound_data,
         )?;
+        let t2 = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+        println!(" Micro Seconds: {}", t2.as_micros() - t1.as_micros());
 
         let transfer_note = TransferNote {
             inputs_nullifiers: pub_inputs.input_nullifiers,
@@ -426,9 +433,53 @@ mod tests {
     type F = <Config as CapConfig>::ScalarField;
 
     #[test]
-    fn test_anon_xfr_2in_6out() {
-        let depth = 10;
+    fn test_anon_xfr_2in_2out() {
+        let depth = 24;
         let num_input = 2;
+        let num_output = 2 ;
+        let cred_expiry = 9999;
+        let valid_until = 1234;
+        let extra_proof_bound_data = "0x12345678901234567890".as_bytes().to_vec();
+
+        let mut prng = ark_std::test_rng();
+        let domain_size = compute_universal_param_size::<Config>(
+            NoteType::Transfer,
+            num_input,
+            num_output,
+            depth,
+        )
+            .unwrap();
+        let srs = universal_setup_for_staging::<_, Config>(domain_size, &mut prng).unwrap();
+        let (prover_key, verifier_key, _) = preprocess(&srs, num_input, num_output, depth).unwrap();
+
+        let keypair1 = UserKeyPair::<Config>::generate(&mut prng);
+        let keypair2 = UserKeyPair::<Config>::generate(&mut prng);
+
+        // ====================================
+        // a transfer with 0 fee
+        // ====================================
+        let input_amounts = Amount::from_vec(&[1, 31]);
+        let output_amounts = Amount::from_vec(&[1, 31]);
+
+        let _builder = test_anon_xfr_helper(
+            &input_amounts,
+            &output_amounts,
+            &keypair1,
+            &keypair2,
+            depth,
+            &prover_key,
+            &verifier_key,
+            valid_until,
+            cred_expiry,
+            &extra_proof_bound_data,
+        )
+            .unwrap();
+    }
+
+    #[test]
+    fn test_anon_xfr_2in_6out() {
+        let depth = 24;
+        let num_input = 1;
         let num_output = 6;
         let cred_expiry = 9999;
         let valid_until = 1234;
@@ -451,7 +502,7 @@ mod tests {
         // ====================================
         // a transfer with 0 fee
         // ====================================
-        let input_amounts = Amount::from_vec(&[30, 25]);
+        let input_amounts = Amount::from_vec(&[55]);
         let output_amounts = Amount::from_vec(&[30, 3, 4, 5, 6, 7]);
 
         let mut builder = test_anon_xfr_helper(
